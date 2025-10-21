@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minijuego Diamante GTA</title>
+<style>
+  body {
+    background-color: #111;
+    color: white;
+    font-family: Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  h1 {
+    margin-bottom: 10px;
+    font-size: 22px;
+  }
+
+  #timeBar {
+    width: 400px;
+    height: 10px;
+    background-color: #333;
+    border: 1px solid #666;
+    border-radius: 5px;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+
+  #timeBarInner {
+    height: 100%;
+    background-color: limegreen;
+    width: 100%;
+    transition: width 0.05s linear;
+  }
+
+  canvas {
+    background: radial-gradient(circle at center, #1a1a1a 60%, #000);
+    border: 2px solid #444;
+    border-radius: 10px;
+  }
+
+  #result {
+    margin-top: 15px;
+    font-size: 26px;
+    font-weight: bold;
+  }
+
+  #winMessage {
+    position: absolute;
+    font-size: 42px;
+    font-weight: bold;
+    color: lime;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-shadow: 0 0 10px #0f0;
+    display: none;
+  }
+</style>
+</head>
+<body>
+<h1>Presiona <span style="color:orange;">E</span> justo cuando la bolita pase por el cuadro</h1>
+<div id="timeBar"><div id="timeBarInner"></div></div>
+<canvas id="gameCanvas" width="400" height="400"></canvas>
+<div id="result"></div>
+<div id="winMessage">🏆 ¡Perfecto! Completaste los 6 objetivos</div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const result = document.getElementById("result");
+const winMessage = document.getElementById("winMessage");
+const timeBar = document.getElementById("timeBarInner");
+
+const cx = canvas.width / 2;
+const cy = canvas.height / 2;
+const size = 120;
+let t = 0;
+let speed = 0.004;
+let canPress = true;
+let targets = [];
+let totalTargets = 6;
+let timeLeft = 6; // segundos
+let timeRunning = false;
+let timerInterval;
+
+// puntos del diamante
+const corners = [
+  { x: cx, y: cy - size },
+  { x: cx + size, y: cy },
+  { x: cx, y: cy + size },
+  { x: cx - size, y: cy }
+];
+
+function interpolate(p1, p2, t) {
+  return { x: p1.x + (p2.x - p1.x) * t, y: p1.y + (p2.y - p1.y) * t };
+}
+
+function getPointOnDiamond(progress) {
+  const segment = (progress * 4) % 4;
+  const i = Math.floor(segment);
+  const localT = segment - i;
+  const next = (i + 1) % 4;
+  return interpolate(corners[i], corners[next], localT);
+}
+
+function generateTargets() {
+  targets = [];
+  let attempts = 0;
+  while (targets.length < totalTargets && attempts < 500) {
+    const rand = Math.random();
+    const pos = getPointOnDiamond(rand);
+    let tooClose = false;
+
+    for (const t of targets) {
+      const dist = Math.hypot(pos.x - t.x, pos.y - t.y);
+      if (dist < 40) {
+        tooClose = true;
+        break;
+      }
+    }
+
+    if (!tooClose) targets.push({ ...pos, hit: false });
+    attempts++;
+  }
+}
+
+function drawDiamond() {
+  ctx.strokeStyle = "#888";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(corners[0].x, corners[0].y);
+  for (let i = 1; i < corners.length; i++) {
+    ctx.lineTo(corners[i].x, corners[i].y);
+  }
+  ctx.closePath();
+  ctx.stroke();
+}
+
+function drawTargets() {
+  for (const t of targets) {
+    ctx.fillStyle = t.hit ? "orange" : "rgba(255,165,0,0.15)";
+    ctx.strokeStyle = "#aaa";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.rect(t.x - 12, t.y - 12, 24, 24);
+    ctx.fill();
+    ctx.stroke();
+  }
+}
+
+function getMarkerPosition() {
+  return getPointOnDiamond(t);
+}
+
+function drawMarker() {
+  const pos = getMarkerPosition();
+  ctx.fillStyle = "cyan";
+  ctx.beginPath();
+  ctx.arc(pos.x, pos.y, 10, 0, Math.PI * 2);
+  ctx.fill();
+  return pos;
+}
+
+function startTimer() {
+  clearInterval(timerInterval);
+  timeLeft = 6;
+  timeBar.style.width = "100%";
+  timeBar.style.backgroundColor = "limegreen";
+  timeRunning = true;
+
+  const totalDuration = 6000;
+  const start = Date.now();
+
+  timerInterval = setInterval(() => {
+    const elapsed = Date.now() - start;
+    const progress = Math.max(0, 1 - elapsed / totalDuration);
+    timeBar.style.width = (progress * 100) + "%";
+    if (progress < 0.3) timeBar.style.backgroundColor = "orange";
+    if (progress < 0.1) timeBar.style.backgroundColor = "red";
+
+    if (elapsed >= totalDuration) {
+      clearInterval(timerInterval);
+      timeRunning = false;
+      resetGame("⏰ Tiempo agotado", "red");
+    }
+  }, 50);
+}
+
+function resetGame(message, color) {
+  result.textContent = message;
+  result.style.color = color;
+  winMessage.style.display = "none";
+  clearInterval(timerInterval);
+  setTimeout(() => {
+    result.textContent = "";
+    generateTargets();
+    startTimer();
+  }, 1500);
+}
+
+function winGame() {
+  winMessage.style.display = "block";
+  clearInterval(timerInterval);
+  setTimeout(() => {
+    winMessage.style.display = "none";
+    generateTargets();
+    startTimer();
+  }, 3000);
+}
+
+function update() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawDiamond();
+  drawTargets();
+  drawMarker();
+  t += speed;
+  if (t > 1) t -= 1;
+  requestAnimationFrame(update);
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key.toLowerCase() === "e" && canPress && timeRunning) {
+    canPress = false;
+    const markerPos = getMarkerPosition();
+    let hitSomething = false;
+
+    for (const target of targets) {
+      const dist = Math.hypot(markerPos.x - target.x, markerPos.y - target.y);
+      if (!target.hit && dist < 12) { // precisión ajustada
+        target.hit = true;
+        hitSomething = true;
+      }
+    }
+
+    if (hitSomething) {
+      const remaining = targets.filter(t => !t.hit).length;
+      if (remaining === 0) {
+        winGame();
+      } else {
+        result.textContent = `🎯 Acertaste (${totalTargets - remaining}/${totalTargets})`;
+        result.style.color = "yellow";
+        setTimeout(() => result.textContent = "", 800);
+      }
+    } else {
+      resetGame("❌ Fallaste, reiniciando...", "red");
+    }
+
+    setTimeout(() => { canPress = true; }, 300);
+  }
+});
+
+generateTargets();
+update();
+startTimer();
+</script>
+</body>
+</html>
